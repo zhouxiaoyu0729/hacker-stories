@@ -5,13 +5,14 @@ import React, {
   useReducer,
   useRef,
   useState,
-  memo,
-  useMemo
+  useMemo,
 } from "react";
 import axios from "axios"; //导入axios
 import styled from "styled-components";
-// import { ReactComponent as Check } from './check.svg';
-
+import List from "./List";
+import SearchForm from "./SearchForm";
+import RemberHistory from "./RemenberHistory";
+import { uniq } from "lodash";
 const API_ENDPOINT = "https://hn.algolia.com/api/v1/search?query=";
 
 const StyledContainer = styled.div`
@@ -27,9 +28,11 @@ const StyledHeadlinePrimary = styled.h1`
   font-weight: 300;
   letter-spacing: 2px;
 `;
+// 通用处理只显示最后5个搜索记录  当前输入的不展示为按钮
+const getLastSearches = (urls) => urls.slice(-6).slice(0,-1);
+const extractSearchTerm = (url) => url.replace(API_ENDPOINT, "");
 
 const getSumComments = (stories) => {
-  console.log("C");
   return stories.data.reduce((result, value) => result + value.num_comments, 0);
 };
 
@@ -41,20 +44,37 @@ function App() {
     isLoading: false,
     isError: false,
   });
-  const sumCommnts = useMemo(()=>getSumComments(stories),[stories]) ;
+  const sumCommnts = useMemo(() => getSumComments(stories), [stories]);
+  const [url, setUrl] = useState([`${API_ENDPOINT}${searchTerm}`]);
 
-  const [url, setUrl] = useState(`${API_ENDPOINT}${searchTerm}`);
   const handleSearch = (event) => {
     setSearchTerm(event.target.value);
   };
 
+  //截取多余的数据拿到最后5个搜索记录  去重 当前搜索的是数据不展示为按钮
+  const lastSerachs = uniq(
+    getLastSearches(url)
+      .map((url) => extractSearchTerm(url))
+  );
   useEffect(() => {
     localStorage.setItem("search", searchTerm);
   }, [searchTerm]);
 
+  // 提取公共代码
+  const handleUrl = (val) => {
+    const currentUrl = `${API_ENDPOINT}${val}`;
+    const arr = url.concat(currentUrl);
+    setUrl(arr);
+  };
   const onSearchSubmit = (event) => {
-    setUrl(`${API_ENDPOINT}${searchTerm}`);
+    handleUrl(searchTerm);
     event.preventDefault();
+  };
+
+  const handleLastSearch = (val) => {
+    // 再次搜索
+    setSearchTerm(val);
+    handleUrl(val);
   };
 
   const handleFetchStories = useCallback(async () => {
@@ -63,7 +83,8 @@ function App() {
     });
 
     try {
-      const res = await axios.get(url);
+      const lastUrl = url[url.length - 1];
+      const res = await axios.get(lastUrl);
       dispatchStories({
         type: "STORIES_FETCH_SUCCESS",
         payload: res.data.hits,
@@ -97,85 +118,22 @@ function App() {
         onSearchSubmit={onSearchSubmit}
         onSearchInput={handleSearch}
       />
-      {/* <Search search={searchTerm} onSearch={handleSearch} /> */}
+      {/* 记住上一次搜索记录 */}
+      <RemberHistory
+        list={lastSerachs}
+        getSearchRecords={(val) => handleLastSearch(val)}
+      />
+
       <hr />
       {stories.isError && <p>-----something is wrong-------</p>}
       {stories.isLoading ? (
-        <p>---------Loading---------</p>
+        <span>---------Loading---------</span>
       ) : (
         <List list={stories.data} handleRemoveStory={handleRemoveStory} />
       )}
     </StyledContainer>
   );
 }
-
-const SearchForm = ({ searchTerm, onSearchInput, onSearchSubmit }) => {
-  return (
-    <form onSubmit={onSearchSubmit}>
-      <InputWithLabel
-        id="search"
-        value={searchTerm}
-        isFocused
-        onInputChange={onSearchInput}
-      >
-        <strong>Search:</strong>
-      </InputWithLabel>
-      <button type="submit" disabled={!searchTerm}>
-        搜索
-      </button>
-    </form>
-  );
-};
-
-const InputWithLabel = ({
-  id,
-  type = "text",
-  value,
-  isFocused,
-  onInputChange,
-  children,
-}) => {
-  return (
-    <div>
-      <label htmlFor="search">{children} </label>
-      <input id={id} type={type} value={value} onChange={onInputChange} />
-    </div>
-  );
-};
-const Item = ({ item, onRemoveItem }) => {
-  return (
-    <div key={item.objectID}>
-      <span>
-        <a href={item.url}>{item.title}</a>
-      </span>
-      <span>{item.author}</span>
-      <span>{item.num_comments}</span>
-      <span>{item.points}</span>
-      <button type="button" onClick={() => onRemoveItem(item)}>
-        <div>
-          <a href="https://www.freepik.com" title="免费皮克">
-            免费皮克
-          </a>
-        </div>
-      </button>
-    </div>
-  );
-};
-
-const List = memo(({ list, handleRemoveStory }) => {
-  return list.map((item) => (
-    <Item key={item.objectID} item={item} onRemoveItem={handleRemoveStory} />
-  ));
-});
-
-// const Search = ({ search, onSearch }) => {
-//   return (
-//     <div>
-//       <label htmlFor="search">Search: </label>
-//       <input id="search" type="text" value={search} onChange={onSearch} />
-//     </div>
-//   );
-// };
 
 // 自定义组件
 const useSemiPersistentState = (key, initialState) => {
