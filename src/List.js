@@ -51,9 +51,10 @@ const List = memo(({ list, handleRemoveStory }) => {
           <span>Actions</span>
         </div>
       </div>
-      {sortedList.map((item) => (
+      {sortedList.map((item, index) => (
+        // 1~100随机数
         <Item
-          key={item.objectID}
+          key={index + "" + Math.round(Math.random() * 100 + 1)}
           item={item}
           onRemoveItem={handleRemoveStory}
         />
@@ -64,7 +65,7 @@ const List = memo(({ list, handleRemoveStory }) => {
 const Item = ({ item, onRemoveItem }) => {
   return (
     <>
-      <div style={{ display: "flex" }} key={item.objectID}>
+      <div style={{ display: "flex" }}>
         <span style={{ width: "40%" }}>
           <a href={item.url}>{item.title}</a>
         </span>

@@ -13,6 +13,7 @@ import List from "./List";
 import SearchForm from "./SearchForm";
 import RemberHistory from "./RemenberHistory";
 import { uniq } from "lodash";
+
 const API_BASE = "https://hn.algolia.com/api/v1";
 const API_SEARCH = "/search";
 const PARAM_SEARCH = "query=";
@@ -31,8 +32,11 @@ const StyledHeadlinePrimary = styled.h1`
 `;
 // 通用处理只显示最后5个搜索记录  当前输入的不展示为按钮
 const getLastSearches = (urls) => urls.slice(-6).slice(0, -1);
+
 const extractSearchTerm = (url) =>
-  url.substring(url.lastIndexOf("?") + 1, url.lastIndexOf("&"));
+  url
+    .substring(url.lastIndexOf("?") + 1, url.lastIndexOf("&"))
+    .replace(PARAM_SEARCH, "");
 
 const getSumComments = (stories) => {
   return stories.data.reduce((result, value) => result + value.num_comments, 0);
@@ -60,25 +64,26 @@ function App() {
   const lastSerachs = uniq(
     getLastSearches(url).map((url) => extractSearchTerm(url))
   );
+
   useEffect(() => {
     localStorage.setItem("search", searchTerm);
   }, [searchTerm]);
 
   // 提取公共代码
-  const handleUrl = (val) => {
-    const currentUrl = `${API_BASE}${API_SEARCH}?${PARAM_SEARCH}${val}`;
+  const handleUrl = (val, page) => {
+    const currentUrl = `${API_BASE}${API_SEARCH}?${PARAM_SEARCH}${val}&page=${page}`;
     const arr = url.concat(currentUrl);
     setUrl(arr);
   };
   const onSearchSubmit = (event) => {
-    handleUrl(searchTerm);
+    handleUrl(searchTerm, 0);
     event.preventDefault();
   };
 
   const handleLastSearch = (val) => {
     // 再次搜索
     setSearchTerm(val);
-    handleUrl(val);
+    handleUrl(val, 0);
   };
 
   const handleFetchStories = useCallback(async () => {
@@ -88,7 +93,7 @@ function App() {
 
     try {
       const lastUrl = url[url.length - 1];
-      const res = await axios.get(lastUrl + `&page=${stories.page}`);
+      const res = await axios.get(lastUrl);
       dispatchStories({
         type: "STORIES_FETCH_SUCCESS",
         payload: {
@@ -101,7 +106,7 @@ function App() {
         type: "STORIES_FETCH_FAILURE",
       });
     }
-  }, [url, stories.page]);
+  }, [url]);
 
   useEffect(() => {
     // 仅在组件首次渲染后运行
@@ -116,9 +121,7 @@ function App() {
   }, []);
 
   const getAllList = () => {
-    dispatchStories({
-      type: "ADD_PAGE",
-    });
+    handleUrl(stories.searchTerm, stories.page++);
   };
 
   return (
