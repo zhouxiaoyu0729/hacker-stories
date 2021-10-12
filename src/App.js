@@ -13,8 +13,9 @@ import List from "./List";
 import SearchForm from "./SearchForm";
 import RemberHistory from "./RemenberHistory";
 import { uniq } from "lodash";
-const API_ENDPOINT = "https://hn.algolia.com/api/v1/search?query=";
-
+const API_BASE = "https://hn.algolia.com/api/v1";
+const API_SEARCH = "/search";
+const PARAM_SEARCH = "query=";
 const StyledContainer = styled.div`
   height: 100vw;
   padding: 20px;
@@ -29,8 +30,9 @@ const StyledHeadlinePrimary = styled.h1`
   letter-spacing: 2px;
 `;
 // 通用处理只显示最后5个搜索记录  当前输入的不展示为按钮
-const getLastSearches = (urls) => urls.slice(-6).slice(0,-1);
-const extractSearchTerm = (url) => url.replace(API_ENDPOINT, "");
+const getLastSearches = (urls) => urls.slice(-6).slice(0, -1);
+const extractSearchTerm = (url) =>
+  url.substring(url.lastIndexOf("?") + 1, url.lastIndexOf("&"));
 
 const getSumComments = (stories) => {
   return stories.data.reduce((result, value) => result + value.num_comments, 0);
@@ -41,11 +43,14 @@ function App() {
   // useReducer状态管理
   const [stories, dispatchStories] = useReducer(storiesReducer, {
     data: [],
+    page: 0,
     isLoading: false,
     isError: false,
   });
   const sumCommnts = useMemo(() => getSumComments(stories), [stories]);
-  const [url, setUrl] = useState([`${API_ENDPOINT}${searchTerm}`]);
+  const [url, setUrl] = useState([
+    `${API_BASE}${API_SEARCH}?${PARAM_SEARCH}${searchTerm}`,
+  ]);
 
   const handleSearch = (event) => {
     setSearchTerm(event.target.value);
@@ -53,8 +58,7 @@ function App() {
 
   //截取多余的数据拿到最后5个搜索记录  去重 当前搜索的是数据不展示为按钮
   const lastSerachs = uniq(
-    getLastSearches(url)
-      .map((url) => extractSearchTerm(url))
+    getLastSearches(url).map((url) => extractSearchTerm(url))
   );
   useEffect(() => {
     localStorage.setItem("search", searchTerm);
@@ -62,7 +66,7 @@ function App() {
 
   // 提取公共代码
   const handleUrl = (val) => {
-    const currentUrl = `${API_ENDPOINT}${val}`;
+    const currentUrl = `${API_BASE}${API_SEARCH}?${PARAM_SEARCH}${val}`;
     const arr = url.concat(currentUrl);
     setUrl(arr);
   };
@@ -84,17 +88,20 @@ function App() {
 
     try {
       const lastUrl = url[url.length - 1];
-      const res = await axios.get(lastUrl);
+      const res = await axios.get(lastUrl + `&page=${stories.page}`);
       dispatchStories({
         type: "STORIES_FETCH_SUCCESS",
-        payload: res.data.hits,
+        payload: {
+          list: res.data.hits,
+          page: res.data.page,
+        },
       });
     } catch {
       dispatchStories({
         type: "STORIES_FETCH_FAILURE",
       });
     }
-  }, [url]);
+  }, [url, stories.page]);
 
   useEffect(() => {
     // 仅在组件首次渲染后运行
@@ -108,8 +115,17 @@ function App() {
     });
   }, []);
 
+  const getAllList = () => {
+    dispatchStories({
+      type: "ADD_PAGE",
+    });
+  };
+
   return (
     <StyledContainer>
+      <button type="button" onClick={getAllList}>
+        获取更多
+      </button>
       <StyledHeadlinePrimary>
         My Hacker Stories with {sumCommnts}
       </StyledHeadlinePrimary>
@@ -163,7 +179,8 @@ const storiesReducer = (state, action) => {
         ...state,
         isLoading: false,
         isError: false,
-        data: action.payload,
+        data: state.data.concat(action.payload.list),
+        page: action.payload.page,
       };
     case "STORIES_FETCH_FAILURE":
       return {
@@ -183,6 +200,11 @@ const storiesReducer = (state, action) => {
         data: state.data.filter(
           (story) => action.payload.objectID !== story.objectID
         ),
+      };
+    case "ADD_PAGE":
+      return {
+        ...state,
+        page: state.page++,
       };
     default:
       throw new Error();
